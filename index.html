@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="initial-scale=1, maximum-scale=1, user-scalable=no">
+  <title>Hurricane Points with Firefly Symbology and Saffir-Simpson Scale</title>
+  <style>
+    html, body, #viewDiv {
+      padding: 0;
+      margin: 0;
+      height: 100%;
+      width: 100%;
+    }
+    #credit {
+            font-size: 14px; /* Smaller font size for credit */
+            position: absolute; /* Position it in the bottom right */
+            bottom: 10px; /* Position it at the bottom */
+            right: 10px; /* Position it at the right */
+            color: white; /* Color for credit text */
+            z-index: 10; /* Ensure it appears above the map */
+        }
+
+#titleBar {
+    background-color: #333; /* Dark gray background */
+    color: #f8f8f8; /* Off-white text */
+    text-align: center; /* Center the text */
+    padding: 15px; /* Add some padding */
+    font-size: 24px; /* Font size for title */
+    font-weight: bold; /* Bold font */
+    position: relative; /* Position for layout */
+    z-index: 10; /* Ensure it appears above the map */
+}
+
+  </style>
+  
+  <link rel="stylesheet" href="https://js.arcgis.com/4.23/esri/themes/light/main.css">
+  <script src="https://js.arcgis.com/4.23/"></script>
+  
+  <script>  
+    require([
+        "esri/Map", 
+        "esri/views/SceneView",
+        "esri/layers/FeatureLayer",
+        "esri/layers/TileLayer", // Import TileLayer for Firefly imagery
+        "esri/renderers/ClassBreaksRenderer",
+        "esri/symbols/PictureMarkerSymbol",
+        "esri/views/3d/environment/VirtualLighting",
+        "esri/widgets/Legend",
+        "esri/widgets/HistogramRangeSlider",
+        "esri/smartMapping/statistics/histogram",
+        "esri/core/promiseUtils"
+    ], function(Map, SceneView, FeatureLayer, TileLayer, ClassBreaksRenderer, PictureMarkerSymbol, VirtualLighting,Legend, HistogramRangeSlider, histogram, promiseUtils) {
+
+      // Create the Firefly imagery layer
+      const worldImagery = new TileLayer({
+        portalItem: {
+          id: "a66bfb7dd3b14228bf7ba42b138fe2ea",
+        },
+      });
+
+      // Create the map with Firefly imagery as the basemap
+      var map = new Map({
+        basemap: null, // Set to null to avoid default basemap
+        layers: [worldImagery] // Add the Firefly imagery layer
+      });
+
+      // Create the SceneView with a center focusing on hurricane-prone areas
+      var view = new SceneView({
+        container: "viewDiv",
+        map: map,
+        camera: {
+          position: {
+            x: -75, // Longitude
+            y: 25,  // Latitude
+            z: 20000000 // Adjusted zoom level (in meters) to provide a broader view
+          },
+          tilt: 0
+        },
+        environment: {
+          background: {
+            type: "color", // autocasts as new ColorBackground()
+            color: [50, 50, 50, 1] // Dark gray background
+          },
+          lighting: {
+            type: "virtual", // Use virtual lighting
+            directShadows: false // Disable shadows
+          }
+        }
+      });
+
+      // Define firefly symbol function for symbol URLs
+      function createFireflySymbol(size, url) {
+        return {
+          type: "picture-marker",  // autocasts as new PictureMarkerSymbol()
+          url: url,
+          width: size + "px",
+          height: size + "px"
+        };
+      }
+
+      // Create a ClassBreaksRenderer for hurricane wind speeds based on Saffir-Simpson scale + Tropical categories
+      var renderer = new ClassBreaksRenderer({
+        field: "USA_WIND", // Field to base classification on
+        classBreakInfos: [
+          {
+            minValue: 0, // Tropical Depression: <=38 mph
+            maxValue: 38,
+            symbol: createFireflySymbol(2, 'https://static.arcgis.com/images/Symbols/Firefly/FireflyD5.png'),
+            label: "Tropical Depression: ≤38 mph"
+          },
+          {
+            minValue: 39, // Tropical Storm: 39-73 mph
+            maxValue: 73,
+            symbol: createFireflySymbol(5, 'https://static.arcgis.com/images/Symbols/Firefly/FireflyD5.png'),
+            label: "Tropical Storm: 39-73 mph"
+          },
+          {
+            minValue: 74, // Category 1: 74-95 mph
+            maxValue: 95,
+            symbol: createFireflySymbol(10, 'https://static.arcgis.com/images/Symbols/Firefly/FireflyD9.png'),
+            label: "Category 1: 74-95 mph"
+          },
+          {
+            minValue: 96, // Category 2: 96-110 mph
+            maxValue: 110,
+            symbol: createFireflySymbol(15, 'https://static.arcgis.com/images/Symbols/Firefly/FireflyD9.png'),
+            label: "Category 2: 96-110 mph"
+          },
+          {
+            minValue: 111, // Category 3: 111-129 mph
+            maxValue: 129,
+            symbol: createFireflySymbol(20, 'https://static.arcgis.com/images/Symbols/Firefly/FireflyD9.png'),
+            label: "Category 3: 111-129 mph"
+          },
+          {
+            minValue: 130, // Category 4: 130-156 mph
+            maxValue: 156,
+            symbol: createFireflySymbol(25, 'https://static.arcgis.com/images/Symbols/Firefly/FireflyD9.png'),
+            label: "Category 4: 130-156 mph"
+          },
+          {
+            minValue: 157,
+            maxValue: 186,// Category 5: ≥157 mph
+            symbol: createFireflySymbol(30, 'https://static.arcgis.com/images/Symbols/Firefly/FireflyD11.png'),
+            label: "Category 5: ≥157 mph"
+          }
+        ]
+      });
+
+      // Add the hurricane layer with the ClassBreaksRenderer
+      var hurricaneLayer = new FeatureLayer({
+        url: "https://services2.arcgis.com/FiaPA4ga0iQKduv3/arcgis/rest/services/IBTrACS_ALL_list_v04r00_points_1/FeatureServer/0",
+        renderer: renderer,
+      });
+
+      // Add the layer to the map
+      map.add(hurricaneLayer);
+
+      // Function to rotate the globe
+      function rotate() {
+        if (!view.interacting) {
+          const camera = view.camera.clone();
+          camera.position.longitude -= 0.05; // Adjust the longitude for rotation
+          view.goTo(camera, { animate: false });
+          requestAnimationFrame(rotate); // Recursively call the rotate function
+        }
+      }
+
+      // Start the rotation when the view is ready
+      view.when(function() {
+        console.log("Map and view are ready.");
+        rotate(); // Start rotating the globe
+      }).catch(function(error) {
+        console.error("Error:", error);
+      });
+// Add the legend
+      const legend = new Legend({
+        style: "classic",
+        view: view,
+        layerInfos: [{
+          layer: hurricaneLayer,
+          title: "Hurricane Intensity"
+        }]
+      });
+      view.ui.add(legend, "top-right");
+
+    });
+  </script>
+</head>
+<body>
+  <div id="titleBar">Global Hurricanes (1842-2022) | ArcGIS Maps SDK for JavaScript</div>
+    <div id="viewDiv">
+      <div id="credit">© 2024 Jacob Hogue</div> <!-- Credit text at the bottom -->
+      </div>
+    </div>
+  </body>
+</html>
